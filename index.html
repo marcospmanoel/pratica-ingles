@@ -288,40 +288,36 @@ function speak(t){if(!('speechSynthesis'in window)||!t)return;speechSynthesis.ca
   const u=new SpeechSynthesisUtterance(t);u.lang='en-US';if(enVoice)u.voice=enVoice;
   u.rate=state.level==='iniciante'?.82:state.level==='intermediario'?.95:1.05;speechSynthesis.speak(u);}
 
-// Microfone: UMA gravação contínua só (sem reiniciar) — evita bip repetido e palavras duplicadas.
+// Microfone: dita pro campo de texto. NÃO envia sozinho — o texto fica lá até você tocar ➤.
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let recog=null,listening=false,pendingSend=false,liveText='';
+let recog=null,listening=false,pendingCancel=false,liveText='';
 if(SR){
   recog=new SR();recog.lang='en-US';recog.interimResults=true;recog.continuous=true;
   recog.onresult=e=>{
     let full='';
     for(let i=0;i<e.results.length;i++){full+=e.results[i][0].transcript;if(e.results[i].isFinal)full+=' ';}
     liveText=full.replace(/\s+/g,' ').trim();
-    setHint(liveText?'🎙️ '+liveText:'Ouvindo... pode falar com calma');
+    const base=$('#text').value.trim();
+    setHint((base?base+' ':'')+(liveText||'…')+' 🎙️');
   };
   recog.onerror=e=>{
     if(e.error==='not-allowed'||e.error==='audio-capture'){listening=false;
       $('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');setHint('Permita o microfone no navegador');}
   };
   recog.onend=()=>{
-    const wasListening=listening;listening=false;
-    $('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');
-    if(pendingSend||wasListening){ // usuário tocou ENVIAR, ou a gravação terminou sozinha
-      pendingSend=false;const text=liveText;liveText='';
-      if(text)send(text);else setHint('Não captei nada — toque e fale de novo 🎤');
-    }
+    listening=false;$('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');
+    if(!pendingCancel&&liveText){const box=$('#text');box.value=(box.value.trim()+' '+liveText).trim();}
+    const cancelled=pendingCancel;pendingCancel=false;liveText='';
+    setHint(cancelled?'Apagado. Toque no mic pra falar 🎤':'✅ Pronto no campo abaixo — toque ➤ pra enviar, ou no mic pra falar mais.');
   };
 }
 function startRec(){if(!recog){setHint('Navegador sem suporte a voz — use o texto abaixo');return;}
-  liveText='';listening=true;$('#mic').classList.add('rec');$('#cancelMic').classList.add('show');
-  setHint('🎙️ Falando... toque no mic pra ENVIAR ou no ✖ pra cancelar. Pode pausar pra pensar.');
+  liveText='';pendingCancel=false;listening=true;$('#mic').classList.add('rec');$('#cancelMic').classList.add('show');
+  setHint('🎙️ Falando... toque no mic pra PARAR (o texto fica no campo). ✖ apaga o que você acabou de falar.');
   try{recog.start();}catch(_){}}
-function stopRec(doSend){pendingSend=!!doSend;listening=false;
-  $('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');try{recog.stop();}catch(_){}}
-function cancelRec(){pendingSend=false;listening=false;liveText='';
-  $('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');try{recog.stop();}catch(_){}
-  setHint('Cancelado. Toque no microfone pra tentar de novo 🎤');}
-$('#mic').onclick=()=>{if(!state.keys[state.provider]){openSettings();return;}listening?stopRec(true):startRec();};
+function stopRec(){listening=false;$('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');try{recog.stop();}catch(_){}}
+function cancelRec(){pendingCancel=true;listening=false;$('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');try{recog.stop();}catch(_){}}
+$('#mic').onclick=()=>{if(!state.keys[state.provider]){openSettings();return;}listening?stopRec():startRec();};
 $('#cancelMic').onclick=cancelRec;
 
 /* ---------- UI ---------- */
