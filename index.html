@@ -342,10 +342,15 @@ async function send(text){
     speak(j.reply);handleLevel(j.levelReady);save();setHint('Sua vez 🎤');
   }catch(e){
     console.error(e);
-    if(e.status===401)setHint('Chave inválida — confira em ⚙️');
-    else if(e.status===429)setHint(state.provider==='gemini'?'Limite grátis atingido por hoje — tente mais tarde ou use o Claude':'Sem crédito — adicione em Billing');
-    else if(e.status===400&&state.provider==='claude')setHint('Sem crédito? Adicione US$5 em Billing');
-    else setHint('Erro de conexão ('+(e.status||'rede')+')');
+    let detail='';try{const b=JSON.parse(e.body);detail=(b.error&&b.error.message)||'';}catch(_){detail=(e.body||'').slice(0,140);}
+    if(e.status===401||e.status===403)setHint('Chave inválida ou sem permissão — confira em ⚙️ · '+detail.slice(0,90));
+    else if(e.status===429){
+      if(state.provider==='gemini')setHint('Gemini ocupado/limite. Espere ~1 min e envie de novo. · '+detail.slice(0,100));
+      else setHint('Claude sem crédito — adicione em Billing · '+detail.slice(0,80));
+    }
+    else if(e.status===400&&state.provider==='claude')setHint('Claude: sem crédito? Adicione US$5 em Billing · '+detail.slice(0,80));
+    else if(e.status)setHint('Erro '+e.status+': '+detail.slice(0,100));
+    else setHint('Sem conexão com a internet');
   }
 }
 $('#send').onclick=()=>{const v=$('#text').value.trim();if(v){$('#text').value='';send(v);}};
