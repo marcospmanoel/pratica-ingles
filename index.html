@@ -288,40 +288,37 @@ function speak(t){if(!('speechSynthesis'in window)||!t)return;speechSynthesis.ca
   const u=new SpeechSynthesisUtterance(t);u.lang='en-US';if(enVoice)u.voice=enVoice;
   u.rate=state.level==='iniciante'?.82:state.level==='intermediario'?.95:1.05;speechSynthesis.speak(u);}
 
-// Microfone estilo WhatsApp: 1º toque grava (não corta nas pausas), 2º toque envia.
+// Microfone: UMA gravação contínua só (sem reiniciar) — evita bip repetido e palavras duplicadas.
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let recog=null,listening=false,pendingSend=false;
-let committedText='',sessionFinal='',sessionInterim='';
+let recog=null,listening=false,pendingSend=false,liveText='';
 if(SR){
   recog=new SR();recog.lang='en-US';recog.interimResults=true;recog.continuous=true;
   recog.onresult=e=>{
-    let fin='',interim='';
-    for(let i=0;i<e.results.length;i++){const t=e.results[i][0].transcript;
-      if(e.results[i].isFinal)fin+=t+' ';else interim+=t;}
-    sessionFinal=fin;sessionInterim=interim;
-    const shown=(committedText+fin+interim).trim();
-    setHint(shown?'🎙️ '+shown:'Ouvindo... pode falar com calma');
+    let full='';
+    for(let i=0;i<e.results.length;i++){full+=e.results[i][0].transcript;if(e.results[i].isFinal)full+=' ';}
+    liveText=full.replace(/\s+/g,' ').trim();
+    setHint(liveText?'🎙️ '+liveText:'Ouvindo... pode falar com calma');
   };
   recog.onerror=e=>{
-    if(e.error==='not-allowed'||e.error==='audio-capture'){listening=false;$('#mic').classList.remove('rec');setHint('Permita o microfone no navegador');}
-    // 'no-speech'/'aborted': ignora — o onend reinicia se ainda estiver ouvindo
+    if(e.error==='not-allowed'||e.error==='audio-capture'){listening=false;
+      $('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');setHint('Permita o microfone no navegador');}
   };
   recog.onend=()=>{
-    committedText+=sessionFinal;const leftover=sessionInterim;sessionFinal='';sessionInterim='';
-    if(listening){try{recog.start();}catch(_){}return;} // mantém ouvindo durante as pausas
-    if(pendingSend){pendingSend=false;
-      const text=(committedText+' '+leftover).trim();committedText='';
-      if(text)send(text);else setHint('Não captei nada — toque e fale de novo 🎤');}
+    const wasListening=listening;listening=false;
+    $('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');
+    if(pendingSend||wasListening){ // usuário tocou ENVIAR, ou a gravação terminou sozinha
+      pendingSend=false;const text=liveText;liveText='';
+      if(text)send(text);else setHint('Não captei nada — toque e fale de novo 🎤');
+    }
   };
 }
 function startRec(){if(!recog){setHint('Navegador sem suporte a voz — use o texto abaixo');return;}
-  committedText='';sessionFinal='';sessionInterim='';listening=true;
-  $('#mic').classList.add('rec');$('#cancelMic').classList.add('show');
-  setHint('🎙️ Falando... mic ENVIA, ✖ cancela. Confira o texto e refaça se ele entender errado.');
+  liveText='';listening=true;$('#mic').classList.add('rec');$('#cancelMic').classList.add('show');
+  setHint('🎙️ Falando... toque no mic pra ENVIAR ou no ✖ pra cancelar. Pode pausar pra pensar.');
   try{recog.start();}catch(_){}}
 function stopRec(doSend){pendingSend=!!doSend;listening=false;
   $('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');try{recog.stop();}catch(_){}}
-function cancelRec(){pendingSend=false;listening=false;committedText='';sessionFinal='';sessionInterim='';
+function cancelRec(){pendingSend=false;listening=false;liveText='';
   $('#mic').classList.remove('rec');$('#cancelMic').classList.remove('show');try{recog.stop();}catch(_){}
   setHint('Cancelado. Toque no microfone pra tentar de novo 🎤');}
 $('#mic').onclick=()=>{if(!state.keys[state.provider]){openSettings();return;}listening?stopRec(true):startRec();};
