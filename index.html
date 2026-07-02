@@ -83,6 +83,12 @@
   .toast{position:fixed;top:64px;left:50%;transform:translateX(-50%);background:var(--ok);color:#062;font-weight:700;padding:12px 18px;border-radius:30px;z-index:40;font-size:15px;box-shadow:0 8px 30px rgba(57,217,138,.4);display:none}
   .toast.show{display:block;animation:pop .3s ease}
   .provtag{font-size:11px;color:var(--muted);text-align:center;margin-top:4px}
+  .nat{display:block;margin-top:7px;font-size:13.5px;color:var(--accent);background:rgba(108,139,255,.1);border-radius:8px;padding:6px 9px}
+  .modegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  .modegrid button{background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px 8px;font-size:13.5px;cursor:pointer;text-align:center}
+  .modegrid button:active{transform:scale(.97)}
+  .modehead{grid-column:1/-1;font-size:12px;color:var(--muted);margin:12px 0 0;font-weight:600}
+  .modenote{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;font-size:13px;color:var(--muted);margin-top:12px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -99,6 +105,7 @@
     <div class="chip" id="chipLevel">Nível: <b>—</b></div>
     <div class="chip" id="chipScene">Cenário: <b>—</b></div>
     <div class="chip" id="chipEng">🌐 Bilíngue</div>
+    <div class="chip" id="chipModes" style="cursor:pointer">🎯 Modos de treino</div>
     <div class="chip" id="chipReport" style="cursor:pointer">🏁 Encerrar e ver nota</div>
   </div>
 
@@ -163,6 +170,13 @@
         <button data-s="amigo">Conversa de amigo</button>
       </div>
 
+      <label>Velocidade da voz da IA</label>
+      <div class="seg" id="speedSeg">
+        <button data-sp="0.7">🐢 Bem devagar</button>
+        <button data-sp="0.8" class="on">Devagar</button>
+        <button data-sp="1">Normal</button>
+      </div>
+
       <label>Assunto preferido (opcional)</label>
       <input type="text" id="topic" placeholder="Ex.: futebol, trabalho, séries...">
 
@@ -179,6 +193,36 @@
 
       <button class="btn" id="saveSettings">Salvar e conversar</button>
       <p style="margin-top:12px">Suas chaves ficam salvas só neste celular. 🔒</p>
+    </div>
+  </div>
+
+  <!-- ===== MODES ===== -->
+  <div class="modal" id="mModes">
+    <div class="sheet">
+      <h2>🎯 Modos de treino <button class="icon-btn" onclick="closeAll()">✕</button></h2>
+      <p>Toque num modo pra começar. Ideal pra sua meta: <b>Shadowing</b> e <b>Pronunciation</b> treinam ouvir/falar como nativo.</p>
+      <div class="modegrid">
+        <div class="modehead">🎧 Ouvir & falar como nativo</div>
+        <button onclick="cmd('Shadowing Mode')">🔁 Shadowing</button>
+        <button onclick="cmd('Pronunciation Mode')">👄 Pronúncia</button>
+        <button onclick="cmd('Voice Mode')">🎤 Voz (perguntas curtas)</button>
+        <button onclick="cmd('Quick Practice')">⏱️ Prática de 10 min</button>
+        <div class="modehead">💬 Conversação</div>
+        <button onclick="cmd('Conversation Mode')">🗨️ Conversa livre</button>
+        <button onclick="cmd('Destruidor de Travas')">🔥 Destruidor de travas</button>
+        <button onclick="cmd('Storytelling Mode')">📖 Contar histórias</button>
+        <button onclick="cmd('Debate Mode')">⚖️ Debate</button>
+        <div class="modehead">🧱 Gramática & vocabulário</div>
+        <button onclick="cmd('Grammar Mode')">📐 Gramática no contexto</button>
+        <button onclick="cmd('Vocabulary Builder')">🧠 Vocabulário novo</button>
+        <div class="modehead">🌎 Simulações reais</div>
+        <button onclick="cmd('Travel Simulation')">✈️ Viagem</button>
+        <button onclick="cmd('Job Interview')">💼 Entrevista de emprego</button>
+        <div class="modehead">📊 Relatórios</div>
+        <button onclick="cmd('Error Report')">🩹 Erros recorrentes</button>
+        <button onclick="cmd('Weekly Review')">🗓️ Revisão semanal</button>
+      </div>
+      <div class="modenote">🗓️ <b>Plano de 120 dias:</b> mande <b>Day 1</b>, <b>Day 2</b>... e o treinador identifica sua fase e conduz a sessão do dia. Fase 1 (1-30) fluência · 2 (31-60) gramática · 3 (61-90) fluência avançada · 4 (91-120) avançado.</div>
     </div>
   </div>
 
@@ -226,7 +270,7 @@ const SCENES={
 };
 
 const DEFAULT={provider:'claude',keys:{claude:'',gemini:''},level:'iniciante',topic:'',
-  scenario:'livre',englishOnly:false,autoLevel:true,history:[],errors:[],
+  scenario:'livre',englishOnly:false,autoLevel:true,speed:0.8,history:[],errors:[],
   stats:{days:[],streak:0,totalMsgs:0},messagesAtLevel:0};
 let state=Object.assign({},DEFAULT,JSON.parse(localStorage.getItem('pratica_state')||'null'));
 state.keys=Object.assign({claude:'',gemini:''},state.keys);
@@ -237,20 +281,51 @@ const todayStr=()=>new Date().toISOString().slice(0,10);
 
 /* ---------- System prompt ---------- */
 function systemPrompt(){
-  const lvl={iniciante:'O aluno é INICIANTE. Fale inglês MUITO simples e devagar, frases curtas com palavras comuns. Corrija erros com muito carinho.',
-    intermediario:'O aluno é INTERMEDIÁRIO. Fale inglês natural e claro. Corrija erros importantes.',
-    avancado:'O aluno é AVANÇADO. Fale inglês rico e natural. Corrija nuances de fluência.'}[state.level];
+  const lvl={iniciante:'Nível base: INICIANTE — inglês muito simples, frases bem curtas.',
+    intermediario:'Nível base: INTERMEDIÁRIO (enferrujado) — inglês natural, mas claro e pausado.',
+    avancado:'Nível base: AVANÇADO — inglês rico e natural.'}[state.level];
   const topic=state.topic?`Assunto preferido: ${state.topic}.`:'';
-  const ptRule=state.englishOnly?'NÃO traduza: deixe o campo "pt" sempre vazio ("").':'Sempre preencha "pt" com a tradução em português da sua resposta.';
-  return `Você é "Pratica", um tutor de inglês simpático e paciente que conversa por voz com um estudante brasileiro. Respostas CURTAS (1-2 frases) pois serão faladas em voz alta. SEMPRE faça uma pergunta de volta pra manter a conversa.
-${lvl}
-Cenário: ${SCENES[state.scenario].instr} ${topic}
+  const sc=state.scenario!=='livre'?`Cenário atual: ${SCENES[state.scenario].instr}`:'';
+  const ptRule=state.englishOnly?'MODO SÓ INGLÊS: deixe "pt" sempre vazio ("").':'Preencha "pt" com uma tradução/explicação CURTA em português.';
+  return `Você é o TREINADOR PESSOAL DE INGLÊS de um aluno brasileiro que já foi intermediário e está enferrujado. Missão: levá-lo à FLUÊNCIA CONVERSACIONAL em 120 dias, priorizando CONVERSA por voz. ${lvl} ${topic} ${sc}
+
+DIFICULDADES DO ALUNO (respeite sempre):
+- Trava pra falar e demora pra lembrar palavras → seja encorajador, NUNCA faça aula longa.
+- Maior dificuldade: ENTENDER inglês falado. Fale DEVAGAR, frases CURTAS e claras.
+
+REGRAS EM TODA RESPOSTA:
+- Só UMA pergunta por vez e SEMPRE termine com uma pergunta pra continuar a conversa.
+- Resposta curta (será falada em voz alta).
+- Corrija só erros importantes: explique breve em português E mostre a forma mais natural.
+- Gramática só no contexto da conversa.
+
+OUVIR NATIVOS (essencial): no campo "natural", reescreva sua fala do jeito que um americano REALMENTE fala, rápido e com reduções/ligações (going to→gonna, want to→wanna, what do you→whaddaya, got to→gotta, let me→lemme). Se não houver diferença, deixe "natural" vazio.
+
+PLANO 120 DIAS: quando o aluno disser "Day X", diga em que FASE está e conduza: Fase 1 (1-30) recuperar fluência; Fase 2 (31-60) reconstruir gramática; Fase 3 (61-90) fluência avançada; Fase 4 (91-120) inglês avançado.
+
+A CADA ~5 respostas do aluno, coloque em "tip" um mini-resumo: Correções + Vocabulário novo + Expressões úteis.
+
+COMANDOS (se a mensagem for um destes, entre no modo e conduza):
+- Conversation Mode: conversa livre no nível atual.
+- Destruidor de Travas: conversa intensa como amigo americano, tudo em inglês, te forçando a frases maiores; análise de erros a cada 6 respostas.
+- Voice Mode: perguntas curtas e naturais pra treino por voz.
+- Shadowing Mode: dê uma frase curta, peça repetir, corrija e aumente a dificuldade aos poucos.
+- Pronunciation Mode: foco em pronúncia; frases curtas, destaque sons difíceis e diferenças pra brasileiros.
+- Grammar Mode: prática de gramática dentro de contexto.
+- Vocabulary Builder: ensine 10 palavras, 5 expressões e 3 phrasal verbs com exemplos.
+- Storytelling Mode: peça o aluno contar histórias; faça perguntas pra expandir.
+- Debate Mode: escolha um tema e defenda o lado contrário.
+- Travel Simulation: simule aeroporto/imigração/hotel/restaurante/compras/táxi, tudo em inglês.
+- Job Interview: seja um recrutador nativo; entrevista completa, corrigindo após cada pergunta.
+- Quick Practice: sessão rápida de ~10 min pra manter o inglês ativo.
+- Error Report: liste erros recorrentes (gramática, vocabulário, construção), sugestões e plano de 7 dias.
+- Weekly Review: notas de fluência/gramática/vocabulário (0-10), principais erros e acertos, 10 palavras pra revisar e plano da semana.
+
 ${ptRule}
-Se a mensagem do aluno for exatamente "REPORT_REQUEST", avalie TODA a conversa e responda só:
-{"report":{"fluency":0-100,"grammar":0-100,"vocab":0-100,"comment":"comentário motivador em português"}}
-Caso contrário, responda SEMPRE só com JSON válido neste formato:
-{"reply":"resposta falada em inglês","pt":"tradução em português ou vazio","tip":"se o aluno errou em inglês, explique gentilmente em português o erro e a forma certa; senão vazio","levelReady":true_ou_false}
-"levelReady" = true APENAS se o aluno já domina bem o nível atual e está claramente pronto pra subir.`;
+Se a mensagem for exatamente "REPORT_REQUEST", responda só: {"report":{"fluency":0-100,"grammar":0-100,"vocab":0-100,"comment":"em português"}}
+Caso contrário responda SEMPRE só com JSON válido:
+{"reply":"fala em inglês, clara e curta","natural":"a mesma fala do jeito nativo/rápido (com reduções), ou vazio","pt":"tradução/explicação curta em português ou vazio","tip":"correção gentil, ou o mini-resumo a cada 5 respostas; senão vazio","levelReady":true_ou_false}
+"levelReady"=true só se o aluno claramente já pode subir de nível.`;
 }
 
 /* ---------- AI calls (Claude + Gemini) ---------- */
@@ -284,9 +359,9 @@ let enVoice=null;
 function pickVoice(){const vs=speechSynthesis.getVoices();
   enVoice=vs.find(v=>/en[-_]US/i.test(v.lang)&&/female|samantha|zira|aria|jenny|natural/i.test(v.name))||vs.find(v=>/en[-_]US/i.test(v.lang))||vs.find(v=>/^en/i.test(v.lang))||null;}
 speechSynthesis.onvoiceschanged=pickVoice;pickVoice();
-function speak(t){if(!('speechSynthesis'in window)||!t)return;speechSynthesis.cancel();
+function speak(t,fast){if(!('speechSynthesis'in window)||!t)return;speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(t);u.lang='en-US';if(enVoice)u.voice=enVoice;
-  u.rate=state.level==='iniciante'?.82:state.level==='intermediario'?.95:1.05;speechSynthesis.speak(u);}
+  u.rate=fast?1.05:(state.speed||0.8);speechSynthesis.speak(u);}
 
 // Microfone: grava contínuo (atravessa as pausas). Toque de novo = ENVIA direto pra IA. ✖ = cancela.
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -336,10 +411,15 @@ $('#mic').onclick=()=>{if(!state.keys[state.provider]){openSettings();return;}li
 $('#cancelMic').onclick=cancelRec;
 
 /* ---------- UI ---------- */
-function addMsgUI(text,who,pt){const d=document.createElement('div');d.className='msg '+who;d.textContent=text;
+function addMsgUI(text,who,pt,natural){const d=document.createElement('div');d.className='msg '+who;d.textContent=text;
   if(pt){const s=document.createElement('span');s.className='pt';s.textContent=pt;d.appendChild(s);}
-  if(who==='ai'){const sp=document.createElement('span');sp.className='speak';sp.textContent='🔊 ouvir';sp.onclick=()=>speak(text);
-    d.appendChild(document.createElement('br'));d.appendChild(sp);}
+  if(who==='ai'){
+    if(natural&&natural.replace(/[^a-z]/gi,'').toLowerCase()!==text.replace(/[^a-z]/gi,'').toLowerCase()){
+      const n=document.createElement('span');n.className='nat';n.textContent='🗣️ Como soa: “'+natural+'”';d.appendChild(n);}
+    d.appendChild(document.createElement('br'));
+    const sp=document.createElement('span');sp.className='speak';sp.textContent='🔊 devagar';sp.onclick=()=>speak(text);d.appendChild(sp);
+    const nf=document.createElement('span');nf.className='speak';nf.style.marginLeft='14px';nf.textContent='⚡ como nativo';nf.onclick=()=>speak(natural||text,true);d.appendChild(nf);
+  }
   chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
 function addTipUI(t){if(!t)return;const d=document.createElement('div');d.className='tip';d.innerHTML='💡 <b>Dica:</b> '+t;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
 function setHint(t){$('#hint').textContent=t;}
@@ -382,7 +462,7 @@ async function send(text){
     const raw=await callAI();
     state.history.push({role:'assistant',content:raw});
     const j=parseJSON(raw);
-    addMsgUI(j.reply,'ai',state.englishOnly?'':j.pt);
+    addMsgUI(j.reply,'ai',state.englishOnly?'':j.pt,j.natural);
     if(j.tip){addTipUI(j.tip);state.errors.push({tip:j.tip,date:todayStr()});}
     speak(j.reply);handleLevel(j.levelReady);save();setHint('Sua vez 🎤');
   }catch(e){
@@ -425,7 +505,7 @@ function openSettings(){
   setProv(state.provider);
   $('#keyClaude').value=state.keys.claude;$('#keyGemini').value=state.keys.gemini;
   $('#topic').value=state.topic;
-  segSet('#levelSeg','lvl',state.level);segSet('#sceneSeg','s',state.scenario);
+  segSet('#levelSeg','lvl',state.level);segSet('#sceneSeg','s',state.scenario);segSet('#speedSeg','sp',String(state.speed));
   $('#swAuto').classList.toggle('on',state.autoLevel);$('#swEng').classList.toggle('on',state.englishOnly);
   open('#mSettings');
 }
@@ -434,6 +514,9 @@ function open(id){closeAll();$(id).classList.add('open');}
 function closeAll(){$$('.modal').forEach(m=>m.classList.remove('open'));}
 window.closeAll=closeAll;
 $('#openSettings').onclick=openSettings;$('#openProgress').onclick=openProgress;
+$('#chipModes').onclick=()=>open('#mModes');
+function cmd(c){if(!state.keys[state.provider]){openSettings();return;}closeAll();send(c);}
+window.cmd=cmd;
 $$('.modal').forEach(m=>m.onclick=e=>{if(e.target===m)closeAll();});
 
 function setProv(p){state._pendProv=p;$$('#provSeg button').forEach(b=>b.classList.toggle('on',b.dataset.p===p));
@@ -442,6 +525,7 @@ $$('#provSeg button').forEach(b=>b.onclick=()=>setProv(b.dataset.p));
 function segSet(sel,attr,val){$$(sel+' button').forEach(b=>b.classList.toggle('on',b.dataset[attr]===val));}
 $$('#levelSeg button').forEach(b=>b.onclick=()=>segSet('#levelSeg','lvl',b.dataset.lvl));
 $$('#sceneSeg button').forEach(b=>b.onclick=()=>segSet('#sceneSeg','s',b.dataset.s));
+$$('#speedSeg button').forEach(b=>b.onclick=()=>segSet('#speedSeg','sp',b.dataset.sp));
 $('#swAuto').onclick=()=>$('#swAuto').classList.toggle('on');
 $('#swEng').onclick=()=>$('#swEng').classList.toggle('on');
 
@@ -452,6 +536,7 @@ $('#saveSettings').onclick=()=>{
   state.topic=$('#topic').value.trim();
   state.level=$('#levelSeg button.on').dataset.lvl;
   state.scenario=$('#sceneSeg button.on').dataset.s;
+  state.speed=parseFloat($('#speedSeg button.on').dataset.sp);
   state.autoLevel=$('#swAuto').classList.contains('on');
   state.englishOnly=$('#swEng').classList.contains('on');
   if(state.level!==prevLevel)state.messagesAtLevel=0;
@@ -481,16 +566,16 @@ $('#resetAll').onclick=()=>{if(confirm('Apagar TODO o progresso e conversas? (as
 
 /* ---------- Greeting & resume ---------- */
 function greet(){
-  const g={iniciante:{reply:"Hi! I'm Pratica. What's your name?",pt:"Oi! Eu sou o Pratica. Qual é o seu nome?"},
-    intermediario:{reply:"Hey! I'm Pratica. How's your day going?",pt:"Olá! Sou o Pratica. Como está seu dia?"},
-    avancado:{reply:"Hi there! I'm Pratica. What have you been up to lately?",pt:"Oi! Sou o Pratica. O que você tem feito ultimamente?"}}[state.level];
-  addMsgUI(g.reply,'ai',state.englishOnly?'':g.pt);speak(g.reply);
-  state.history.push({role:'assistant',content:JSON.stringify({reply:g.reply,pt:g.pt,tip:'',levelReady:false})});save();
+  const g={iniciante:{reply:"Hi! I'm your English coach. What's your name?",natural:"Hi! I'm your English coach. Whas your name?",pt:"Oi! Sou seu treinador de inglês. Qual é o seu nome?"},
+    intermediario:{reply:"Hey! I'm your English coach. How's your day going so far?",natural:"Hey! I'm your English coach. How's your day goin' so far?",pt:"Olá! Sou seu treinador de inglês. Como está seu dia até agora?"},
+    avancado:{reply:"Hi there! I'm your English coach. What have you been up to lately?",natural:"Hi there! I'm your English coach. Whatcha been up to lately?",pt:"Oi! Sou seu treinador. O que você tem feito ultimamente?"}}[state.level];
+  addMsgUI(g.reply,'ai',state.englishOnly?'':g.pt,g.natural);speak(g.reply);
+  state.history.push({role:'assistant',content:JSON.stringify({reply:g.reply,natural:g.natural,pt:g.pt,tip:'',levelReady:false})});save();
 }
 function renderHistory(){
   state.history.forEach(m=>{
     if(m.role==='user'){if(m.content==='REPORT_REQUEST')return;addMsgUI(m.content,'me');}
-    else{const j=parseJSON(m.content);if(j.report)return;addMsgUI(j.reply,'ai',state.englishOnly?'':j.pt);if(j.tip)addTipUI(j.tip);}
+    else{const j=parseJSON(m.content);if(j.report)return;addMsgUI(j.reply,'ai',state.englishOnly?'':j.pt,j.natural);if(j.tip)addTipUI(j.tip);}
   });
 }
 
